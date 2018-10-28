@@ -5,15 +5,19 @@
  *      Author: ASUS
  */
 #include <msp430.h>
+#include <math.h>
 #include "flappy.h"
 
 unsigned int t1=0, t2=0, distance=0, first_pulse=0;
 
 uint8_t display_map[8];
-int Car_P;
-int star,i,n,Location,min,max,k;
+int star,n,i,Location,min,max,k,a,b,collisiontest;
 uint16_t adc_result;
 uint16_t volt;
+uint8_t counter;
+uint8_t bird[8] = {0b11111111,0b11101111,0b11111111,0b11111111,0b11111111,0b11111111,0b11111111,0b11111111};
+uint8_t birdposition = 0b11111111;
+uint8_t birdposition1 = 0b11111111;
 
 void sys_init(void)
 {
@@ -70,57 +74,99 @@ void end(volatile sys_params_t *params)
 
 void play(volatile sys_params_t *params)
 {
+	uint8_t point=0;
+	collisiontest=0;
     for(star=0;star<32;star++)
     {
-//        P2OUT |= trigger;       // Trigger measure time
-//        __delay_cycles(20);
-//        P2OUT &= ~trigger;
-//        __delay_cycles(10000);
-        car_position(distance);
-        for(k=star;k<(star+8);k++)
-        {
-            display_map[k-star] = params->game_map[k];
-        }
-//        if((display_map[star+1] | Car_P) == Car_P) // Conlission check
-//           break;
-        display_map[1] = display_map[1] & Car_P;
-        for (n=0;n<500;n++)
-        {
-            for(i=0;i<8;i++)
-            {
-                Send_byte_A(params->led_control[i],1);
-                Send_byte_A(sys_params.off_img[i],1);
-                Send_byte_A(display_map[i],1);
-                P1OUT |= BIT3;
-                __delay_cycles(100);
-                P1OUT &= ~BIT3;
-            }
-            __delay_cycles(1);
-        }
+    	point += 1;
+    	if(collisiontest==1)
+    		break;
+
+    	else
+    	{
+    	   for(k=star;k<(star+8);k++)
+   			   display_map[k-star] = params->game_map[k];
+
+    	   position(display_map);
+
+    	   for (n=0;n<500;n++)
+    	   {
+   			   for(i=0;i<8;i++)
+   			   {
+   				   Send_byte_A(params->led_control[i],1);
+   				   Send_byte_A(bird[i],1);
+   				   Send_byte_A(display_map[i],1);
+   				   P1OUT |= BIT3;
+   				   __delay_cycles(100);
+   				   P1OUT &= ~BIT3;
+   			   }
+   			   __delay_cycles(1);
+   		   }
+    	  }
+    	if(point >20)
+    		break;
     }
-    sys_params.iState=2;
+    if (point>20)
+    	sys_params.iState=0;
+    else
+    	sys_params.iState=2;
 }
 
-void car_position(int distance)
+void position(uint8_t display_map[8])
 {
-    if(distance < 10)
-    {
-        Car_P = 0b11011111;
-    }
-    else if(distance>=10 & distance <15)
-        {
-            Car_P = 0b11101111;
-        }
-    else if(distance>=15 & distance < 20)
-        {
-            Car_P = 0b11110111;
-        }
-    else if(distance >= 20)
-        {
-            Car_P = 0b11111011;
-        }
-}
+	if(sys_params.jump > 0)
+	{
+		birdposition = bird[1];
+//		birdposition = birdposition >> 1;
+//		birdposition |= 0b10000000;
+//		birdposition = birdposition << 1;
+//		birdposition|= 0b00000001;
+		birdposition = birdposition << 1;
+		birdposition|= 0b00000001;
+		bird[1] = birdposition;
+		sys_params.jump = sys_params.jump - 1;
+	}
+	else
+	{
+		birdposition = bird[1];
+		birdposition = birdposition >> 1;
+		birdposition |= 0b10000000;
+		bird[1] = birdposition;
+		if (sys_params.jump != 0)
+			sys_params.jump = sys_params.jump - 1;
+	}
+	birdposition1 = bird[1];
+	for(i=0; i<8; i++)
+	{
+		if((birdposition1 & 0b00000001)==0)
+		{
+			a = 0;
+			counter=i;
+		}
+		birdposition1 = birdposition1 >> 1;
+		birdposition|= 0b10000000;
+	}
 
+	birdposition1 = display_map[1];
+	birdposition1 = birdposition1 >> counter;
+
+	if ((birdposition1 & 0b00000001)==0)
+		b = 0;
+	else
+		b = 1;
+
+    switch(counter)
+        {
+        case 0:
+        	collisiontest = 1;
+        case 7:
+        	collisiontest = 1;
+        }
+	if(a==b)
+	{
+		collisiontest = 1;
+	}
+}
 void init_timer(void){
    TA1CTL = TASSEL_2 + MC_2 ;                       // continuos mode, 0 --> FFFF
    TA1CCTL0 = CM_3 + CAP + CCIS_0 + SCS+ CCIE;      // falling edge & raising edge, capture mode, capture/compare interrupt enable
@@ -148,22 +194,11 @@ __interrupt void BUTTON_Interrupt_Handle(void)// nho
         sys_params.iState++;
         P2IFG &= ~BTN_1;
     }
+    if ((P2IFG & BTN_2) == BTN_2)
+    {
+        sys_params.jump = 1;
+        P2IFG &= ~BTN_2;
+    }
     P2IFG = 0;
-}
-#pragma vector = TIMER1_A0_VECTOR
-__interrupt void timer0(void){
 
-   if (P2IN & BIT0 ==1 )      //  neu co xung canh len tai chan echo (P2.0)
-      t1 = TA1CCR0;
-
-   else {                  // neu co canh xuong tai chan echo (P2.0)
-      t2 = TA1CCR0;
-      if (t2 > t1){
-         distance = (t2-t1)/58;
-
-      }
-
-      }
-
-   TA1CCTL0 &= ~ CCIFG;
 }

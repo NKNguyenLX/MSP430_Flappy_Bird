@@ -32,6 +32,11 @@ typedef
         uint8_t       off_img[8];
         uint8_t       game_map[32];
         uint8_t       iState;
+        uint8_t		  jump;
+        uint8_t 	  bird[8];
+        uint8_t 	  birdposition;
+        uint8_t 	  birdposition1;
+
     }
 sys_params_t;
 
@@ -41,7 +46,7 @@ void sys_init(void);
 void begin(volatile sys_params_t *params);
 void end(volatile sys_params_t *params);
 void play(volatile sys_params_t *params);
-void car_position(int distance);
+void position(uint8_t display_map[8]);
 void init_timer(void);
 void image_copy(uint8_t *a, uint8_t *b);
 void map_copy(uint8_t *a, uint8_t *b);
